@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+build/
+dist/
+.DS_Store
+
+# Local Claude Code settings are per-machine, never shared
+.claude/settings.local.json
+
+# A real vault is personal data - never commit one
+/vault/
+*.vault/
+.secondbrain/
+.env
+.env.*
+.tokens.json

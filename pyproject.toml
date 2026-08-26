@@ -1,0 +1,29 @@
+[project]
+name = "second-brain"
+version = "0.1.0"
+description = "A governed personal knowledge system: evidence -> claims -> deterministic governance -> compiled AI context."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+dependencies = [
+    "PyYAML>=6.0",
+    "requests>=2.31",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+x-bookmarks = ["requests>=2.31"]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+second-brain = "second_brain.cli:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["second_brain*"]
+
+[tool.setuptools.package-data]
+second_brain = ["schema/*.json", "examples/**/*"]

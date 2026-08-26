@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Second Brain Governance Event",
+  "description": "One immutable record in ClaimStore/events/YYYY-MM-DD.jsonl. A claim's current status is derived by replaying its events in occurred_at order - see claimstore.current_status().",
+  "type": "object",
+  "required": ["schema_version", "event_id", "event_type", "occurred_at", "actor", "payload"],
+  "properties": {
+    "schema_version": { "type": "integer" },
+    "event_id": { "type": "string", "pattern": "^evt_[0-9a-f]{12}$" },
+    "claim_id": { "type": ["string", "null"], "description": "The claim this event applies to, or null for connector-level events (e.g. connector-run)." },
+    "event_type": {
+      "type": "string",
+      "enum": ["kep-decision", "proposal-created", "proposal-decision", "auto-applied", "durable-write", "superseded", "merged", "split", "archived", "openlore-published", "connector-run", "capture-received"]
+    },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "actor": { "type": "string", "description": "Who or what caused this event: a connector name, 'kep', or a human identifier (e.g. an owner value from second-brain.yml)." },
+    "channel": { "type": ["string", "null"], "description": "Where a human decision was made, e.g. 'cli' or 'telegram'." },
+    "payload": { "type": "object", "description": "Event-type-specific data, e.g. {\"action\": \"propose\", \"reason\": \"...\"} for a kep-decision." }
+  }
+}

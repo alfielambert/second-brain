@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Second Brain Claim",
+  "description": "One immutable record in ClaimStore/claims/YYYY-MM-DD.jsonl. Never rewritten after creation - current state is derived by replaying events (see claimstore.current_status), not by mutating this record.",
+  "type": "object",
+  "required": ["schema_version", "claim_id", "trace_id", "ingested_at", "connector", "source", "claim_type", "entities", "content", "evidence", "confidence", "operation", "kep_state", "output_refs", "lifecycle_status"],
+  "properties": {
+    "schema_version": { "type": "integer" },
+    "claim_id": { "type": "string", "pattern": "^claim_[0-9a-f]{12}$" },
+    "trace_id": { "type": "string", "description": "Groups claims extracted from the same connector run for end-to-end tracing." },
+    "ingested_at": { "type": "string", "format": "date-time" },
+    "connector": { "type": "string", "description": "Free-form connector name (e.g. x_bookmarks, capture, gmail). Not a closed enum - new connectors don't require a schema change." },
+    "source": {
+      "type": "object",
+      "required": ["id", "type", "occurred_at", "title"],
+      "properties": {
+        "id": { "type": "string", "description": "Stable source-system ID - a tweet ID, a file path, a meeting UUID. Never a title/date guess. See docs/connector-contract.md on idempotency." },
+        "type": { "type": "string" },
+        "occurred_at": { "type": "string", "format": "date-time" },
+        "title": { "type": "string" },
+        "url": { "type": ["string", "null"] }
+      }
+    },
+    "claim_type": {
+      "type": "string",
+      "enum": ["observation", "fact", "entity_update", "relationship", "intention", "decision", "hypothesis", "experiment", "insight", "contradiction", "open_question", "published_content", "signal"]
+    },
+    "entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "name"],
+        "properties": {
+          "type": { "type": "string", "enum": ["person", "company", "project", "concept"] },
+          "name": { "type": "string" },
+          "ref": { "type": ["string", "null"], "description": "Vault wikilink if this resolves to an existing note, else null." }
+        }
+      }
+    },
+    "content": { "type": "string" },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": { "type": "string" },
+          "speaker": { "type": ["string", "null"] },
+          "location": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "confidence": { "type": "string", "enum": ["low", "medium", "high"] },
+    "operation": {
+      "type": "string",
+      "enum": ["enrich_existing", "create_entity", "promote", "contradiction", "supersede", "merge", "split", "reclassify", "structural", "weak_inference"],
+      "description": "What kind of change this claim represents. KEP's routing (second_brain/kep.py) is a deterministic function of this field."
+    },
+    "target_note": { "type": ["string", "null"], "description": "Vault path this claim would affect, if known." },
+    "kep_state": { "type": "string", "description": "Informational snapshot at write time; the authoritative current status is derived from events." },
+    "output_refs": { "type": "array", "items": { "type": "string" }, "description": "Vault paths this claim ultimately produced/affected, appended by later events - not mutated in place on the claim record." },
+    "lifecycle_status": { "type": "string", "enum": ["active", "archived"] }
+  }
+}

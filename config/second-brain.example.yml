@@ -1,0 +1,21 @@
+# Copy to your vault root as second-brain.yml (second-brain init does this
+# for you automatically). Every value here is optional beyond what init sets.
+
+vault: .
+
+connectors:
+  capture:
+    enabled: true
+  x_bookmarks:
+    enabled: false   # needs X_CLIENT_ID in a .env at the vault root
+
+governance:
+  # cli = approve/reject via `second-brain approve|reject`.
+  # telegram is a documented pattern (docs/roadmap.md), not shipped in v1.
+  approval_channel: cli
+
+distribution:
+  openlore:
+    enabled: false
+    # A plain directory OpenLore is pointed at. See docs/openlore-integration.md.
+    publish_path: null
