@@ -1,6 +1,6 @@
 # Second Brain
 
-An open-source second brain that turns the information you collect into governed, evolving knowledge your AI agents can actually use.
+An open-source second brain that turns evidence into governed knowledge for AI agents. OpenLore makes it multiplayer.
 
 Most second brains help you save things.
 
