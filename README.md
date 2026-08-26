@@ -21,6 +21,8 @@ semantically similar." The interesting part isn't storage; it's the
 governance step in the middle that decides what's allowed to become
 knowledge in the first place.
 
+![init -> claims -> route -> approve -> compile](docs/assets/demo.gif)
+
 ## Try it in about two minutes
 
 ```bash
