@@ -7,8 +7,8 @@ This one decides what deserves to become knowledge.
 It turns evidence from the tools you already use into **claims**, routes
 every claim through a **deterministic governance protocol** instead of
 vibes, and only then lets something become durable knowledge an AI agent
-can actually trust. Then it compiles the right slice of that knowledge into
-task-scoped context - always showing you what it left out and why.
+can use with provenance. Then it compiles the right slice of that knowledge
+into task-scoped context - always showing you what it left out and why.
 
 ```
 Evidence -> Claims -> Governance (KEP) -> Durable Knowledge -> Compiled Context
@@ -26,6 +26,9 @@ knowledge in the first place.
 ```bash
 git clone https://github.com/alfielambert/second-brain.git
 cd second-brain
+
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e .
 
 second-brain init ~/my-vault --with-sample
@@ -81,12 +84,15 @@ Sources -> Connectors -> Claim Store -> KEP -> Governed Knowledge -> Local AI
 Sources -> Connectors -> Claim Store -> KEP -> Governed Knowledge -> OpenLore -> Multiple AI agents
 ```
 
-[OpenLore](https://github.com/aakarim/go-openlore) is a separate,
-already open-source knowledge server - not a proprietary add-on bolted on
-here. Running one agent locally? You don't need it. Once Claude Code,
-ChatGPT, and whatever else you use all need the *same current* knowledge,
-copying your vault into each one creates a new problem: stale, divergent
-copies. OpenLore is the layer that solves that - see
+[OpenLore](https://github.com/aakarim/go-openlore) is an open-source
+knowledge server for AI agents.
+
+Running one agent locally? You probably don't need it.
+
+Once several agents need the same current knowledge, maintaining separate
+copies creates a new problem: context starts to diverge. OpenLore is the
+distribution layer that keeps one governed knowledge base available to
+multiple agents - see
 [`docs/openlore-integration.md`](docs/openlore-integration.md).
 
 Full diagram and the local-core/Claude-Code-runtime split:
@@ -128,7 +134,8 @@ Writing your own: [`docs/connector-contract.md`](docs/connector-contract.md).
    Claude Code layer for real judgement-based extraction
    ([`claude/README.md`](claude/README.md)), then scheduling
    ([`launchd/README.md`](launchd/README.md))
-5. Multiple agents that need the same current knowledge? See
+5. Once Claude Code, ChatGPT where supported, and other MCP-capable agents
+   all need the same current knowledge, see
    [`docs/openlore-integration.md`](docs/openlore-integration.md)
 
 ## License
