@@ -21,6 +21,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -116,3 +117,74 @@ def stale_connectors(max_age_hours: int = 36, vault_root: Optional[Path] = None)
         if age_hours > max_age_hours:
             out.append({"connector": name, "age_hours": round(age_hours, 1), "reason": "stale"})
     return out
+
+
+# --- CLI ---------------------------------------------------------------
+#
+# Today's shipped connectors (capture, x_bookmarks) call mark_checked()
+# directly as a plain Python function - they never need this CLI. It
+# exists for the connector shape docs/connector-contract.md documents but
+# doesn't ship: one that runs as an external subprocess (an agent CLI, an
+# MCP-backed session). That kind of connector can only report its own
+# health/cursor state back to the vault through some allowlisted,
+# invokable surface - not by importing this module directly, since it's
+# running in a different process. `python -m second_brain.health
+# mark-checked <connector> <status> <json>` is that surface: a single,
+# fixed, easy-to-allowlist command shape, so a connector session never has
+# to improvise how to report its own state.
+
+def _cli_mark_checked(args: list[str]) -> None:
+    """mark-checked <connector> <status> [<json-extra-fields>|-]
+
+    Wraps mark_checked() directly - no write logic is reimplemented here.
+    Extra fields are one JSON object, as a literal argument or read from
+    stdin with '-'. Prints the updated state block as JSON on success.
+    Exits 2 on invalid input (unknown status, malformed JSON, or a JSON
+    value that isn't an object) and 1 if the write itself fails."""
+    if len(args) < 2:
+        print("usage: python -m second_brain.health mark-checked <connector> <status> [<json-extra-fields>|-]", file=sys.stderr)
+        sys.exit(2)
+
+    connector, status = args[0], args[1]
+    if status not in VALID_STATUSES:
+        print(f"error: status {status!r} not in {sorted(VALID_STATUSES)}", file=sys.stderr)
+        sys.exit(2)
+
+    extra: dict = {}
+    if len(args) >= 3:
+        raw = sys.stdin.read() if args[2] == "-" else args[2]
+        raw = raw.strip()
+        if raw:
+            try:
+                extra = json.loads(raw)
+            except json.JSONDecodeError as e:
+                print(f"error: extra fields must be valid JSON: {e}", file=sys.stderr)
+                sys.exit(2)
+            if not isinstance(extra, dict):
+                print(f"error: extra fields JSON must be an object, got {type(extra).__name__}", file=sys.stderr)
+                sys.exit(2)
+
+    try:
+        result = mark_checked(connector, status, **extra)
+    except Exception as e:  # noqa: BLE001 - any write failure must exit non-zero
+        print(f"error: write failed: {type(e).__name__}: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    print(json.dumps(result, indent=2))
+
+
+def main() -> None:
+    if len(sys.argv) < 2:
+        print("usage: python -m second_brain.health <mark-checked|stale|CONNECTOR> [args]", file=sys.stderr)
+        sys.exit(2)
+    if sys.argv[1] == "mark-checked":
+        _cli_mark_checked(sys.argv[2:])
+    elif sys.argv[1] == "stale":
+        hours = int(sys.argv[2]) if len(sys.argv) > 2 else 36
+        print(json.dumps(stale_connectors(hours), indent=2))
+    else:
+        print(json.dumps(get_state(sys.argv[1]), indent=2))
+
+
+if __name__ == "__main__":
+    main()
