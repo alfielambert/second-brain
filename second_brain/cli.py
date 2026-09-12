@@ -25,10 +25,15 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from second_brain import claimstore, health, kep, notes
+from second_brain import claimstore, health, kep, notes, resilience
 from second_brain.vault import find_vault_root, init_vault, load_config, VaultNotFoundError
 
 DURABLE_STATUSES = {"auto_applied", "approved"}
+
+# Applies to both shipped connectors' in-process network/file I/O - see
+# resilience.py's docstring on transient_exceptions for why a caller (not
+# resilience.py itself) decides what counts as worth retrying.
+TRANSIENT_EXCEPTIONS = (ConnectionError, TimeoutError, OSError)
 
 
 def cmd_init(args: argparse.Namespace) -> None:
@@ -38,6 +43,8 @@ def cmd_init(args: argparse.Namespace) -> None:
     if args.with_sample:
         n = len(list(claimstore.iter_all_claims(vault_root=root)))
         print(f"Seeded {n} sample claims (fictional Acme dataset).")
+        print("Seeded 2 sample report runs (Reports/Atlas Support Mentions.md")
+        print("  + Reports/History/Atlas Support Mentions/*.md) - see docs/architecture.md.")
     print("\nNext:")
     print(f"  cd {path}")
     print("  second-brain claims          # see what was captured")
@@ -56,25 +63,38 @@ def cmd_claims(args: argparse.Namespace) -> None:
 
 
 def cmd_route(args: argparse.Namespace) -> None:
+    """Route every un-routed claim through KEP. Safe to re-run after a
+    crash or interruption mid-way: claim_needs_kep_routing() means a claim
+    already routed in an earlier attempt is never re-decided (and never
+    gets a second kep-decision event) - but critically, this does NOT skip
+    it entirely. An earlier attempt may have recorded the kep-decision
+    event and then been interrupted before completing the auto-apply
+    write or the proposal file; _apply_claim/_create_proposal are
+    themselves idempotent (see their own docstrings), so acting on an
+    already-known decision again is always safe and completes whatever
+    that earlier attempt left unfinished."""
     root = find_vault_root()
     routed = 0
     for claim in claimstore.iter_all_claims(vault_root=root):
-        existing = claimstore.get_events_for_claim(claim["claim_id"], vault_root=root)
-        if any(e["event_type"] == "kep-decision" for e in existing):
-            continue  # already routed
+        claim_id = claim["claim_id"]
 
-        decision = kep.classify_claim(claim)
-        claimstore.append_event(
-            vault_root=root, event_type="kep-decision", actor="kep", claim_id=claim["claim_id"],
-            payload={"action": decision.action, "reason": decision.reason},
-        )
-        routed += 1
+        if claimstore.claim_needs_kep_routing(claim_id, vault_root=root):
+            decision = kep.classify_claim(claim)
+            claimstore.append_event(
+                vault_root=root, event_type="kep-decision", actor="kep", claim_id=claim_id,
+                payload={"action": decision.action, "reason": decision.reason},
+            )
+            routed += 1
+        else:
+            payload = claimstore.get_kep_decision(claim_id, vault_root=root)
+            decision = kep.Decision(action=payload["action"], reason=payload["reason"], requires_approval=False)
 
         if decision.action == "auto_apply":
-            claimstore.append_event(
-                vault_root=root, event_type="auto-applied", actor="kep", claim_id=claim["claim_id"], payload={},
-            )
-            _apply_claim(root, claim, actor="kep")
+            applied_fresh = _apply_claim(root, claim, actor="kep")
+            if applied_fresh:  # only log auto-applied for work actually done this call, never on a no-op retry
+                claimstore.append_event(
+                    vault_root=root, event_type="auto-applied", actor="kep", claim_id=claim_id, payload={},
+                )
         elif decision.action == "signal":
             pass  # logged as a claim only; never proposed, never written
         else:
@@ -84,30 +104,56 @@ def cmd_route(args: argparse.Namespace) -> None:
 
 
 def _create_proposal(root: Path, claim: dict, decision) -> None:
+    """Idempotent: the Proposal file's path is deterministic
+    (Proposals/{claim_id}.md) and a proposal-created event is appended at
+    most once per claim, so calling this again for a claim that already
+    has one (e.g. cmd_route resuming after an interruption) is a safe
+    no-op rather than a duplicate event or an overwritten file."""
+    claim_id = claim["claim_id"]
+    if claimstore.has_event(claim_id, "proposal-created", vault_root=root):
+        return
+
     claimstore.append_event(
-        vault_root=root, event_type="proposal-created", actor="kep", claim_id=claim["claim_id"],
+        vault_root=root, event_type="proposal-created", actor="kep", claim_id=claim_id,
         payload={"action": decision.action, "reason": decision.reason},
     )
-    proposal_path = root / "Proposals" / f"{claim['claim_id']}.md"
+    proposal_path = root / "Proposals" / f"{claim_id}.md"
     proposal_path.parent.mkdir(parents=True, exist_ok=True)
     proposal_path.write_text(
-        f"---\nclaim_id: {claim['claim_id']}\noperation: {claim['operation']}\n"
+        f"---\nclaim_id: {claim_id}\noperation: {claim['operation']}\n"
         f"action: {decision.action}\nstatus: pending\ntarget_note: {claim['target_note']}\n---\n\n"
         f"## Content\n\n{claim['content']}\n\n## Why this needs review\n\n{decision.reason}\n\n"
         f"## Evidence\n\n" + "\n".join(f"- {e['text']}" for e in claim["evidence"]) + "\n"
     )
 
 
-def _apply_claim(root: Path, claim: dict, actor: str) -> None:
+def _apply_claim(root: Path, claim: dict, actor: str) -> bool:
+    """Write a claim's content durably into the vault. Idempotent: a
+    durable-write event is appended at most once per claim, and if one
+    already exists this returns False immediately without touching
+    anything - the caller (cmd_route, cmd_approve) uses that to know
+    whether fresh work actually happened just now, e.g. cmd_route only
+    logs a fresh `auto-applied` event when this returns True, never on a
+    no-op retry. Without the guard here, re-running cmd_route or calling
+    `second-brain approve` twice for the same claim_id would append a
+    second `## Update` block to the target note (notes.write_note appends
+    to an existing note rather than overwriting it) and a second
+    durable-write event.
+
+    Returns True if this call did the write, False if it was already done."""
+    claim_id = claim["claim_id"]
+    if claimstore.has_event(claim_id, "durable-write", vault_root=root):
+        return False
+
     if claim["operation"] == "supersede" and claim["target_note"]:
         for prior in claimstore.iter_all_claims(vault_root=root):
-            if prior["claim_id"] == claim["claim_id"] or prior["target_note"] != claim["target_note"]:
+            if prior["claim_id"] == claim_id or prior["target_note"] != claim["target_note"]:
                 continue
             if claimstore.current_status(prior["claim_id"], vault_root=root) in DURABLE_STATUSES:
-                notes.mark_superseded(root, claim["target_note"], reason=f"Superseded by claim {claim['claim_id']}: {claim['content']}")
+                notes.mark_superseded(root, claim["target_note"], reason=f"Superseded by claim {claim_id}: {claim['content']}")
                 claimstore.append_event(
                     vault_root=root, event_type="superseded", actor=actor, claim_id=prior["claim_id"],
-                    payload={"superseded_by": claim["claim_id"]},
+                    payload={"superseded_by": claim_id},
                 )
 
     if claim["target_note"]:
@@ -120,9 +166,10 @@ def _apply_claim(root: Path, claim: dict, actor: str) -> None:
         notes.write_note(root, claim["target_note"], claim["content"], frontmatter)
 
     claimstore.append_event(
-        vault_root=root, event_type="durable-write", actor=actor, claim_id=claim["claim_id"],
+        vault_root=root, event_type="durable-write", actor=actor, claim_id=claim_id,
         payload={"target_note": claim["target_note"]},
     )
+    return True
 
 
 def cmd_approve(args: argparse.Namespace) -> None:
@@ -163,33 +210,77 @@ def cmd_reject(args: argparse.Namespace) -> None:
     print(f"Rejected {args.claim_id}. No vault write.")
 
 
+def _connector_timeout(config: dict, connector: str) -> float:
+    from second_brain.vault import default_config
+    configured = config.get("connectors", {}).get(connector, {}).get("session_timeout_seconds")
+    if configured is not None:
+        return float(configured)
+    fallback = default_config()["connectors"].get(connector, {}).get("session_timeout_seconds")
+    return float(fallback) if fallback is not None else resilience.DEFAULT_TIMEOUT_SECONDS
+
+
 def cmd_sync(args: argparse.Namespace) -> None:
+    """Run one connector's full discover -> fetch -> normalise ->
+    extract_claims -> update_cursor cycle as a single resilience.run_step()
+    attempt, bounded by that connector's own configured
+    session_timeout_seconds (see vault.default_config() and
+    resilience.py's module docstring for why this bounds the whole cycle,
+    not any one network call inside it). A failure here never crashes the
+    CLI outright - health.py records it as connector status "failed" with
+    the resilience-layer's own error, distinct from a connector reporting
+    e.g. auth_required for its *data* - and cmd_sync exits non-zero so a
+    calling script (cron, launchd, CI) can detect it."""
     root = find_vault_root()
+    config = load_config(root)
+
     if args.connector == "capture":
         from second_brain.connectors import capture as conn
-        items = conn.discover(root)
     elif args.connector == "x_bookmarks":
         from second_brain.connectors import x_bookmarks as conn
-        items = conn.discover(root, limit=args.limit)
     else:
         print(f"Unknown connector: {args.connector}", file=sys.stderr)
         sys.exit(2)
 
-    emitted = 0
-    for item in items:
-        raw = conn.fetch(item)
-        normalised = conn.normalise(raw)
-        for claim_kwargs in conn.extract_claims(normalised):
-            claimstore.append_claim(vault_root=root, **claim_kwargs)
-            emitted += 1
-        conn.update_cursor(root, item)
+    def _do_sync() -> dict:
+        items = conn.discover(root, limit=args.limit) if args.connector == "x_bookmarks" else conn.discover(root)
+        emitted = 0
+        for item in items:
+            raw = conn.fetch(item)
+            normalised = conn.normalise(raw)
+            for claim_kwargs in conn.extract_claims(normalised):
+                record = claimstore.append_claim(vault_root=root, **claim_kwargs)
+                if record["_new"]:
+                    emitted += 1
+            conn.update_cursor(root, item)
+        return {"items_discovered": len(items), "claims_emitted": emitted}
 
-    health.mark_checked(args.connector, "current_no_change" if emitted == 0 else "healthy", vault_root=root, claims_emitted=emitted)
+    timeout = _connector_timeout(config, args.connector)
+    result = resilience.run_step(args.connector, _do_sync, timeout=timeout, transient_exceptions=TRANSIENT_EXCEPTIONS)
+
+    if result.status == "failed":
+        health.mark_checked(args.connector, "failed", vault_root=root, error=result.error)
+        claimstore.append_event(
+            vault_root=root, event_type="connector-run", actor=args.connector,
+            payload={"execution_status": result.status, "error": result.error, "elapsed_seconds": result.elapsed_seconds},
+        )
+        print(f"{args.connector}: sync failed after {result.attempts} attempt(s) - {result.error}", file=sys.stderr)
+        sys.exit(1)
+
+    summary = result.value or {"items_discovered": 0, "claims_emitted": 0}
+    emitted = summary["claims_emitted"]
+    health.mark_checked(
+        args.connector, "current_no_change" if emitted == 0 else "healthy",
+        vault_root=root, claims_emitted=emitted,
+    )
     claimstore.append_event(
         vault_root=root, event_type="connector-run", actor=args.connector,
-        payload={"items_discovered": len(items), "claims_emitted": emitted},
+        payload={
+            "items_discovered": summary["items_discovered"], "claims_emitted": emitted,
+            "execution_status": result.status, "elapsed_seconds": result.elapsed_seconds, "attempts": result.attempts,
+        },
     )
-    print(f"{args.connector}: {len(items)} item(s) discovered, {emitted} claim(s) emitted. Run 'second-brain route' next.")
+    note = "" if result.status == "ok" else f" (execution status: {result.status}, {result.attempts} attempt(s))"
+    print(f"{args.connector}: {summary['items_discovered']} item(s) discovered, {emitted} claim(s) emitted{note}. Run 'second-brain route' next.")
 
 
 def cmd_status(args: argparse.Namespace) -> None:

@@ -65,21 +65,54 @@ def default_config() -> dict:
     return {
         "vault": ".",
         "connectors": {
-            "capture": {"enabled": True},
-            "x_bookmarks": {"enabled": False},
+            # session_timeout_seconds bounds resilience.run_step()'s whole
+            # sync attempt for this connector (discover+fetch+normalise+
+            # extract_claims+update_cursor), not any one network call
+            # inside it - see resilience.py's module docstring for why
+            # that distinction matters. These are illustrative starting
+            # points for connectors that make a handful of network calls,
+            # not measured optima - widen a connector's budget if it
+            # legitimately needs to process more items per run than these
+            # assume, the same way you'd size any timeout: from your own
+            # connector's real behaviour, not a number copied from here.
+            "capture": {"enabled": True, "session_timeout_seconds": 60},
+            "x_bookmarks": {"enabled": False, "session_timeout_seconds": 180},
         },
         "governance": {
             # cli = approve/reject via `second-brain approve|reject`.
-            # telegram is documented in claude/README.md as a v1 Claude
-            # Code-layer feature, not part of the deterministic core.
             "approval_channel": "cli",
+        },
+        "notifications": {
+            # Deterministic outbox (second_brain/outbox.py): a connector
+            # sync step only ever durably creates a proposal; delivery to
+            # a notification channel happens afterwards, in a separate,
+            # idempotent step, so a retried sync can never re-send a
+            # proposal that already went out. See docs/architecture.md.
+            "enabled": False,
+            "channel": None,  # e.g. "telegram" - see outbox.TelegramNotifier
+            "telegram": {
+                # Never put a real token in this file. Both are read from
+                # environment variables at send time.
+                "bot_token_env": "SECOND_BRAIN_TELEGRAM_BOT_TOKEN",
+                "chat_id_env": "SECOND_BRAIN_TELEGRAM_CHAT_ID",
+            },
+        },
+        "watchdog": {
+            # Independent of whether sync itself is running - see
+            # second_brain/watchdog.py's module docstring for why that
+            # independence is the entire point.
+            "stale_after_hours": 36,
         },
         "distribution": {
             "openlore": {
                 "enabled": False,
                 # A plain directory path. Second Brain writes governed
-                # markdown+frontmatter here; OpenLore serves it. See
-                # docs/openlore-integration.md.
+                # markdown+frontmatter here; OpenLore serves it live,
+                # directly, with no separate publish/ingestion step - see
+                # docs/openlore-integration.md. This is a genuinely
+                # different (simpler) distribution model than a
+                # publish-then-verify pipeline, not an unfinished version
+                # of one.
                 "publish_path": None,
             },
         },
@@ -110,5 +143,6 @@ def init_vault(path: Path, with_sample: bool = False) -> Path:
         from second_brain.examples import acme
 
         acme.seed(path)
+        acme.seed_reports(path)
 
     return path

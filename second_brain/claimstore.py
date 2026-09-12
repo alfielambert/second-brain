@@ -43,7 +43,7 @@ VALID_KEP_ACTIONS = {
 }
 
 VALID_EVENT_TYPES = {
-    "kep-decision", "proposal-created", "proposal-decision", "auto-applied",
+    "kep-decision", "proposal-created", "proposal-sent", "proposal-decision", "auto-applied",
     "durable-write", "superseded", "merged", "split", "archived",
     "openlore-published", "connector-run", "capture-received",
 }
@@ -110,14 +110,34 @@ def append_claim(
     operation: str,
     target_note: Optional[str] = None,
     trace_id: Optional[str] = None,
+    dedupe_key: Optional[str] = None,
     vault_root: Optional[Path] = None,
 ) -> dict:
-    """Write one immutable claim record. Returns the full record written.
+    """Write one immutable claim record. Returns the full record written,
+    with an extra transient `_new` key (True if this call wrote a new line,
+    False if it matched an already-recorded claim and wrote nothing - `_new`
+    is never persisted to disk, only returned).
 
     `operation` is the extracting connector's classification of what kind of
     change this claim represents (see VALID_OPERATIONS) - KEP's routing
     decision (kep.classify_claim) is a deterministic function of this field
     plus claim_type/confidence, not a second judgement call.
+
+    Idempotency: if `dedupe_key` matches an already-recorded claim, that
+    existing claim is returned unchanged and no new line is written. Default
+    (no explicit key given): `f"{connector}:{source['id']}:{operation}"` -
+    source['id'] is the stable, connector-provided source identifier (a
+    tweet ID, a capture file path, ...); combined with operation this lets
+    one source legitimately yield several distinct claims (e.g. one about a
+    person, one about a decision) while still catching the common failure
+    mode a connector step needs to survive: it crashes or is retried after
+    writing some claims but before advancing its own cursor
+    (`update_cursor`), so the *same* source item is discovered and processed
+    again from scratch. See connectors/capture.py's discover()/update_cursor()
+    split for a concrete example of exactly that window. Pass an explicit
+    `dedupe_key` when one source genuinely yields multiple claims sharing an
+    operation (e.g. two separate `enrich_existing` claims about two
+    different people from one meeting note).
     """
     if claim_type not in VALID_CLAIM_TYPES:
         raise ValueError(f"claim_type {claim_type!r} not in {sorted(VALID_CLAIM_TYPES)}")
@@ -126,9 +146,15 @@ def append_claim(
     if operation not in VALID_OPERATIONS:
         raise ValueError(f"operation {operation!r} not in {sorted(VALID_OPERATIONS)}")
 
+    key = dedupe_key or f"{connector}:{source.get('id')}:{operation}"
+    existing = _find_claim_by_dedupe_key(key, vault_root=vault_root)
+    if existing is not None:
+        return {**existing, "_new": False}
+
     record = {
         "schema_version": SCHEMA_VERSION,
         "claim_id": _new_id("claim"),
+        "dedupe_key": key,
         "trace_id": trace_id or _new_id("trace"),
         "ingested_at": _now_iso(),
         "connector": connector,
@@ -146,7 +172,14 @@ def append_claim(
     }
     claims_dir, _ = _claim_store_dirs(vault_root)
     _atomic_append_line(claims_dir / f"{_today_str()}.jsonl", record)
-    return record
+    return {**record, "_new": True}
+
+
+def _find_claim_by_dedupe_key(key: str, vault_root: Optional[Path] = None) -> Optional[dict]:
+    for claim in iter_all_claims(vault_root=vault_root):
+        if claim.get("dedupe_key") == key:
+            return claim
+    return None
 
 
 def append_event(
@@ -236,6 +269,52 @@ def current_status(claim_id: str, vault_root: Optional[Path] = None) -> str:
         elif t == "archived":
             status = "archived"
     return status
+
+
+# --- Retry-safe routing/action helpers -----------------------------------
+#
+# A connector or CLI command can be retried after partial progress (some
+# claims/events already written, then a crash or a timeout). These
+# functions are what make "route through KEP" and "act on the routing
+# decision" safe to redo without duplicating a kep-decision event or a
+# proposal-created event. append_claim's dedupe_key already prevents a
+# duplicate *claim*; these prevent duplicating what happens *after* one.
+# See cli.py's cmd_route for the exact resumable pattern this supports:
+# check claim_needs_kep_routing() first; if False, some earlier attempt
+# already decided (get_kep_decision() to find out what) - do not call
+# kep.classify_claim() again and append a second kep-decision event, and do
+# not skip acting on the decision either, since an earlier attempt may have
+# recorded the decision but crashed before completing the auto-apply write
+# or the proposal file.
+
+def claim_needs_kep_routing(claim_id: str, vault_root: Optional[Path] = None) -> bool:
+    """True only if this claim has no kep-decision event yet - safe to call
+    kep.classify_claim() and record one. False means some earlier attempt
+    (this run or an earlier one) already decided for this claim; the
+    decision itself is a pure function of the claim so re-deriving it is
+    harmless, but re-*recording* it would duplicate the event - use
+    get_kep_decision() to retrieve what was already decided instead."""
+    return not any(e["event_type"] == "kep-decision" for e in get_events_for_claim(claim_id, vault_root=vault_root))
+
+
+def get_kep_decision(claim_id: str, vault_root: Optional[Path] = None) -> Optional[dict]:
+    """Return the already-recorded kep-decision event's payload
+    ({"action": ..., "reason": ...}) for this claim, or None if it hasn't
+    been routed yet."""
+    for e in get_events_for_claim(claim_id, vault_root=vault_root):
+        if e["event_type"] == "kep-decision":
+            return e["payload"]
+    return None
+
+
+def has_event(claim_id: str, event_type: str, vault_root: Optional[Path] = None) -> bool:
+    """True if this claim already has at least one event of this type -
+    e.g. has_event(claim_id, "durable-write") before an auto-apply write,
+    or has_event(claim_id, "proposal-created") before writing a Proposal
+    file, so retrying an interrupted apply/propose step never repeats the
+    side effect (a second Meetings-note-style ## Update block, a second
+    Proposals/*.md write, a second event on top of one already recorded)."""
+    return any(e["event_type"] == event_type for e in get_events_for_claim(claim_id, vault_root=vault_root))
 
 
 def pending_proposals(stale_after_days: int = 30, vault_root: Optional[Path] = None) -> list[dict]:

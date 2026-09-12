@@ -14,6 +14,10 @@ into task-scoped context - always showing you what it left out and why.
 Evidence -> Claims -> Governance (KEP) -> Durable Knowledge -> Compiled Context
 ```
 
+Evidence is collected. Knowledge is governed. Context is compiled. Those
+are three distinct steps with three distinct trust levels, and this
+project never lets them blur into one.
+
 This is not a RAG pipeline, a vector database, an Obsidian template, or a
 prompt collection. There's no embedding search here at all - retrieval is
 "which durable, approved notes match this task," not "which chunks are
@@ -87,17 +91,23 @@ Sources -> Connectors -> Claim Store -> KEP -> Governed Knowledge -> OpenLore ->
 ```
 
 [OpenLore](https://github.com/aakarim/go-openlore) is an open-source
-knowledge server for AI agents.
-
-Running one agent locally? You probably don't need it.
+knowledge server for AI agents. **Second Brain creates and governs
+knowledge. OpenLore distributes governed knowledge to agents.** The two
+are cleanly separable, and OpenLore is entirely optional - you do not
+need it to build or use the Second Brain locally. Everything in the
+quickstart above works identically whether or not OpenLore is ever
+configured.
 
 Once several agents need the same current knowledge, maintaining separate
 copies creates a new problem: context starts to diverge. OpenLore is the
 distribution layer that keeps one governed knowledge base available to
-multiple agents - see
+multiple agents, serving the vault's governed directory live with no
+separate publish step - see
 [`docs/openlore-integration.md`](docs/openlore-integration.md).
 
-Full diagram and the local-core/Claude-Code-runtime split:
+Full diagram, the reliability layer (bounded connector sessions, safe
+retries, health vs. execution status, the notification outbox, the
+watchdog), and the local-core/Claude-Code-runtime split:
 [`docs/architecture.md`](docs/architecture.md).
 
 ## Two runtimes, one honest boundary
