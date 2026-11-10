@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 360" width="960" height="360" role="img" aria-labelledby="t d">
+  <title id="t">How Second Brain works</title>
+  <desc id="d">Evidence from X bookmarks, captured notes and your own connectors becomes append-only claims. KEP, a deterministic lookup table, decides whether each claim is auto-applied, held for your approval or logged as a weak signal. Approved claims become governed Markdown knowledge, which is compiled into context for a local AI or served to many agents through OpenLore.</desc>
+  <style>
+    .bg { fill: #ffffff; }
+    .box { fill: #f7f6fb; stroke: #c9c3dd; stroke-width: 1.5; }
+    .opt { fill: #f7f6fb; stroke: #c9c3dd; stroke-width: 1.5; stroke-dasharray: 5 4; }
+    .core { fill: #f1edfb; stroke: #6b4fd8; stroke-width: 2; }
+    .files { fill: #fff6ef; stroke: #ff8a50; stroke-width: 1.5; }
+    .title { font: 600 16px system-ui, -apple-system, "Segoe UI", sans-serif; fill: #1d1b26; }
+    .label { font: 500 14px system-ui, -apple-system, "Segoe UI", sans-serif; fill: #1d1b26; }
+    .small { font: 400 12.5px system-ui, -apple-system, "Segoe UI", sans-serif; fill: #5c5870; }
+    .mono { font: 400 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; fill: #5c5870; }
+    .line { stroke: #8f88a8; stroke-width: 1.5; fill: none; }
+    .dash { stroke: #8f88a8; stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+    .head { fill: #8f88a8; }
+    .chip { fill: #ffffff; stroke: #c9c3dd; stroke-width: 1; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #0d1117; }
+      .box, .opt { fill: #161b22; stroke: #3a3550; }
+      .core { fill: #1d1833; stroke: #9d86ff; }
+      .files { fill: #241a14; stroke: #ff8a50; }
+      .title, .label { fill: #e8e6f0; }
+      .small, .mono { fill: #a5a1b8; }
+      .line, .dash { stroke: #6e6888; }
+      .head { fill: #6e6888; }
+      .chip { fill: #0d1117; stroke: #3a3550; }
+    }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path class="head" d="M0,0 L10,5 L0,10 z"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="960" height="360" rx="12"/>
+
+  <!-- Sources -->
+  <text class="small" x="30" y="44">Evidence</text>
+  <rect class="box" x="30" y="58" width="150" height="62" rx="10"/>
+  <text class="label" x="46" y="86">X bookmarks</text>
+  <text class="mono" x="46" y="106">OAuth sync</text>
+  <rect class="box" x="30" y="138" width="150" height="62" rx="10"/>
+  <text class="label" x="46" y="166">Captured notes</text>
+  <text class="mono" x="46" y="186">inbox/*.md</text>
+  <rect class="box" x="30" y="218" width="150" height="62" rx="10"/>
+  <text class="label" x="46" y="246">Your connectors</text>
+  <text class="mono" x="46" y="266">Gmail, Notion...</text>
+
+  <path class="line" d="M182,89 L190,89 C200,89 200,158 208,158" marker-end="url(#arrow)"/>
+  <path class="line" d="M182,169 L208,169" marker-end="url(#arrow)"/>
+  <path class="line" d="M182,249 L190,249 C200,249 200,180 208,180" marker-end="url(#arrow)"/>
+
+  <!-- Claim Store -->
+  <rect class="box" x="210" y="58" width="150" height="222" rx="12"/>
+  <text class="title" x="228" y="90">Claim Store</text>
+  <text class="small" x="228" y="110">append-only</text>
+  <text class="small" x="228" y="214">Every claim keeps</text>
+  <text class="small" x="228" y="232">its evidence. Nothing</text>
+  <text class="small" x="228" y="250">is overwritten.</text>
+  <text class="mono" x="228" y="150">claim → event</text>
+  <text class="mono" x="228" y="172">claim → event</text>
+
+  <path class="line" d="M362,169 L388,169" marker-end="url(#arrow)"/>
+
+  <!-- KEP -->
+  <rect class="core" x="390" y="58" width="226" height="222" rx="12"/>
+  <text class="title" x="410" y="90">KEP</text>
+  <text class="small" x="410" y="110">a lookup table, not a model call</text>
+  <rect class="chip" x="410" y="124" width="190" height="44" rx="8"/>
+  <text class="label" x="424" y="143">Auto-apply</text>
+  <text class="small" x="424" y="160">confident update</text>
+  <rect class="chip" x="410" y="174" width="190" height="44" rx="8"/>
+  <text class="label" x="424" y="193">Ask you first</text>
+  <text class="small" x="424" y="210">new, conflicting, structural</text>
+  <rect class="chip" x="410" y="224" width="190" height="44" rx="8"/>
+  <text class="label" x="424" y="243">Log a signal</text>
+  <text class="small" x="424" y="260">too weak to keep yet</text>
+
+  <path class="line" d="M618,169 L638,169" marker-end="url(#arrow)"/>
+
+  <!-- Governed knowledge -->
+  <text class="small" x="640" y="44">Governed knowledge</text>
+  <rect class="files" x="640" y="58" width="140" height="222" rx="12"/>
+  <text class="mono" x="656" y="90">vault/</text>
+  <text class="mono" x="668" y="114">Decisions/</text>
+  <text class="mono" x="668" y="138">People/</text>
+  <text class="mono" x="668" y="162">Companies/</text>
+  <text class="mono" x="668" y="186">Insights/</text>
+  <text class="small" x="656" y="236">Plain Markdown</text>
+  <text class="small" x="656" y="256">with provenance.</text>
+
+  <path class="line" d="M782,140 L790,140 C800,140 800,89 808,89" marker-end="url(#arrow)"/>
+  <path class="dash" d="M782,198 L790,198 C800,198 800,249 808,249" marker-end="url(#arrow)"/>
+
+  <!-- Outputs -->
+  <text class="small" x="810" y="44">Your agents</text>
+  <rect class="box" x="810" y="58" width="130" height="62" rx="10"/>
+  <text class="label" x="826" y="86">Local AI</text>
+  <text class="mono" x="826" y="106">compiled pack</text>
+  <rect class="opt" x="810" y="218" width="130" height="62" rx="10"/>
+  <text class="label" x="826" y="246">OpenLore</text>
+  <text class="mono" x="826" y="266">many agents</text>
+  <text class="small" x="826" y="300">optional</text>
+
+  <!-- Caption -->
+  <text class="small" x="30" y="336">Evidence is collected. Knowledge is governed. Context is compiled. Agents only see knowledge that passed governance.</text>
+</svg>

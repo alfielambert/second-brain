@@ -40,7 +40,7 @@ Sources -> Connectors -> Claim Store -> KEP -> Governed Knowledge -> OpenLore ->
 ```
 
 The only thing that changes is the last step. OpenLore
-(https://github.com/aakarim/go-openlore) is a separate, already
+(https://github.com/aakarim/OpenLore) is a separate, already
 open-source, MIT-licensed knowledge server - not a proprietary add-on. It
 knows nothing about claims, KEP, or this schema; it just serves a directory
 of markdown+frontmatter over SSH/MCP/HTTP to authenticated identities.

@@ -72,5 +72,19 @@ def test_grandchild_process_does_not_survive_the_timeout_kill():
 
     if content:  # the grandchild got far enough to write its pid before being killed
         grandchild_pid = int(content)
-        with pytest.raises(ProcessLookupError):
-            os.kill(grandchild_pid, 0)  # signal 0: just checks if the process exists
+        assert not _is_running(grandchild_pid)
+
+
+def _is_running(pid):
+    """True if pid exists and is not a zombie. A killed orphan stays a
+    zombie until init reaps it, and some container inits never do, so
+    os.kill(pid, 0) alone would report a dead process as alive."""
+    try:
+        os.kill(pid, 0)  # signal 0: just checks if the process exists
+    except ProcessLookupError:
+        return False
+    try:
+        with open(f"/proc/{pid}/stat") as f:
+            return f.read().rsplit(")", 1)[1].split()[0] != "Z"
+    except FileNotFoundError:  # no /proc (macOS): trust os.kill
+        return True

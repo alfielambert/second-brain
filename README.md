@@ -1,5 +1,9 @@
 # Second Brain
 
+[![tests](https://github.com/alfielambert/second-brain/actions/workflows/tests.yml/badge.svg)](https://github.com/alfielambert/second-brain/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)
+
 Most second brains store information.
 
 This one decides what deserves to become knowledge.
@@ -78,19 +82,13 @@ this" by walking the chain back to the original evidence. See
 
 ## Architecture
 
-**Local mode** - everything on your machine, nothing required beyond this repo:
+<p align="center">
+  <img src="docs/assets/how-it-works.svg" alt="Evidence from X bookmarks, notes and connectors becomes append-only claims. KEP decides whether each claim is auto-applied, held for approval or logged as a signal. Governed Markdown knowledge is compiled for a local AI, or served to many agents through OpenLore." width="900">
+</p>
 
-```
-Sources -> Connectors -> Claim Store -> KEP -> Governed Knowledge -> Local AI
-```
+**Local mode** runs everything on your machine and needs nothing beyond this repo. **Multiplayer mode** adds OpenLore at the end, once more than one agent needs the same knowledge.
 
-**Multiplayer mode** - once more than one agent needs the same knowledge:
-
-```
-Sources -> Connectors -> Claim Store -> KEP -> Governed Knowledge -> OpenLore -> Multiple AI agents
-```
-
-[OpenLore](https://github.com/aakarim/go-openlore) is an open-source
+[OpenLore](https://github.com/aakarim/OpenLore) is an open-source
 knowledge server for AI agents. **Second Brain creates and governs
 knowledge. OpenLore distributes governed knowledge to agents.** The two
 are cleanly separable, and OpenLore is entirely optional - you do not

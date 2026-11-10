@@ -18,7 +18,7 @@ synchronization problem wearing a knowledge-management costume.
 
 ## What OpenLore is
 
-[OpenLore](https://github.com/aakarim/go-openlore) is a separate,
+[OpenLore](https://github.com/aakarim/OpenLore) is a separate,
 already-open-source (MIT), agent-native knowledge server. It serves a
 directory of markdown+frontmatter to authenticated agent identities over
 SSH, MCP (HTTP or stdio), and a JSON REST API - with per-identity scoped
@@ -42,7 +42,7 @@ with no manual copying.
 go install github.com/aakarim/go-openlore/cmd/openlore@latest
 ```
 
-(Requires Go 1.26+. See the [OpenLore README](https://github.com/aakarim/go-openlore#installation) for other install methods.)
+(Requires Go 1.26+. See the [OpenLore README](https://github.com/aakarim/OpenLore/blob/main/docs/start/quickstart.md#install) for other install methods.)
 
 ### 2. Point it at governed knowledge
 
